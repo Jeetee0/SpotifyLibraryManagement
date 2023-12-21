@@ -1,11 +1,12 @@
 import csv
 import datetime
-from spot_lib_mng import database
-
-import requests
 from pathlib import Path
 
+import requests
+
+from spot_lib_mng import database
 from spot_lib_mng.config import settings
+from spot_lib_mng.spotify_api.token import get_valid_access_token
 
 playlist_url_key_limitations = "description,name,id,owner,tracks(items(track(id,album,artists,duration_ms,external_ids,external_urls,name,popularity)),next)"
 tracks_url_key_limitations = "items(track(id,album,artists,duration_ms,external_ids,external_urls,name,popularity)),next"
@@ -20,7 +21,8 @@ def retrieve_spotify_user_data():
         print("WARN: Skipping user data export because latest state is from today...")
         return
 
-    access_token = database.get_stored_access_token()
+    token = get_valid_access_token()
+    access_token = token['access_token']
     user_data = {}
 
     # 'long_term' (years), 'medium_term' (6 months) or 'short_term' (4 weeks)
@@ -116,7 +118,8 @@ def exec_post_request_with_headers_and_token(url: str, body: dict, access_token:
 
 def get_current_state_of_spotify_playlists():
     total_amount_of_tracks = 0
-    access_token = database.get_stored_access_token()
+    token = get_valid_access_token()
+    access_token = token['access_token']
     print(f"INFO: Exporting current state of spotify playlists for user '{settings.spotify_username}'")
     playlists = {}
     with open(Path(settings.csv_playlist_ids_path)) as csv_file:
@@ -144,7 +147,7 @@ def get_current_state_of_spotify_playlists():
 
 
 def get_spotify_playlist_by_id(access_token: str, spotify_playlist_id: str):
-    #url = f"{settings.spotify_playlist_url}/{spotify_playlist_id}?fields={playlist_url_key_limitations}"
+    # url = f"{settings.spotify_playlist_url}/{spotify_playlist_id}?fields={playlist_url_key_limitations}"
     url = f"{settings.spotify_playlist_url}/{spotify_playlist_id}"
     json = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
     playlist = {
@@ -153,12 +156,12 @@ def get_spotify_playlist_by_id(access_token: str, spotify_playlist_id: str):
         'description': json['description'],
         'owner_id': json['owner']['id'],
         'amount_of_tracks': 0,
-        'tracks': {}
+        'track_ids': []
     }
     playlist = retrieve_all_tracks_for_playlist(playlist, json['tracks'], access_token)
     print(
-        f"\t\tRetrieved data for playlist '{playlist['name']}' - '{playlist['id']}' with '{len(playlist['tracks'])}' tracks")
-    return playlist, len(playlist['tracks'])
+        f"\t\tRetrieved data for playlist '{playlist['name']}' - '{playlist['id']}' with '{len(playlist['track_ids'])}' tracks")
+    return playlist, len(playlist['track_ids'])
 
 
 def retrieve_all_tracks_for_playlist(playlist: dict, current_tracks: list, access_token: str):
@@ -179,20 +182,22 @@ def retrieve_all_tracks_for_playlist(playlist: dict, current_tracks: list, acces
             }
             for artist in track['track']['artists']:
                 new_track['artists'].append({'id': artist['id'], 'name': artist['name']})
-            playlist['tracks'][new_track['id']] = new_track
+            database.update_one(settings.tracks_collection_name, {'_id': new_track['id']}, new_track)
+            playlist['track_ids'].append(new_track['id'])
 
         # track amount limit per call is 100, so check for more tracks
         if 'next' not in current_tracks or not current_tracks['next']:
-            playlist['amount_of_tracks'] = len(playlist['tracks'])
+            playlist['amount_of_tracks'] = len(playlist['track_ids'])
             return playlist
 
-        #url = f"{current_tracks['next']}&fields={tracks_url_key_limitations}"
+        # url = f"{current_tracks['next']}&fields={tracks_url_key_limitations}"
         url = f"{current_tracks['next']}"
         current_tracks = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
 
 
 def create_diff_between_latest_playlist_states():
-    access_token = database.get_stored_access_token()
+    token = get_valid_access_token()
+    access_token = token['access_token']
     latest_documents = database.find_latest_documents(settings.playlist_collection_name, 2)
     latest_diff = database.find_latest_documents(settings.diff_collection_name, 1)
     if len(latest_documents) < 2:
@@ -210,20 +215,19 @@ def create_diff_between_latest_playlist_states():
     new_tracks_diff = {}
     all_stored_track_ids = []
     for _, earlier_playlist in earlier_state_of_playlists.items():
-        for track_id, _ in earlier_playlist['tracks'].items():
-            all_stored_track_ids.append(track_id)
+        all_stored_track_ids.extend(earlier_playlist['track_ids'])
+    all_stored_track_ids = list(dict.fromkeys(all_stored_track_ids))
 
     for playlist_id, latest_playlist in latest_state_of_playlists.items():
         new_tracks_for_playlist = []
         if playlist_id not in earlier_state_of_playlists:
             print(f"\t\tNew playlist '{latest_playlist['name']}' was found.")
-            for track_id, latest_track in latest_playlist['tracks'].items():
-                new_tracks_for_playlist.append(latest_track)
+            new_tracks_for_playlist.extend(latest_playlist['track_ids'])
         else:
-            tracks_before = list(earlier_state_of_playlists[playlist_id]['tracks'].keys())
-            for track_id, latest_track in latest_playlist['tracks'].items():
+            tracks_before = earlier_state_of_playlists[playlist_id]['track_ids']
+            for track_id in latest_playlist['track_ids']:
                 if track_id not in tracks_before:
-                    new_tracks_for_playlist.append(latest_track)
+                    new_tracks_for_playlist.append(track_id)
 
         if len(new_tracks_for_playlist):
             print(f"\t\tFound '{len(new_tracks_for_playlist)}' new track(s) for playlist '{latest_playlist['name']}'")
@@ -246,13 +250,13 @@ def add_tracks_to_spotify_playlist(access_token: str, new_tracks_diff: dict, all
 
     # check which tracks are already in playlist
     diff_playlist, _ = get_spotify_playlist_by_id(access_token, settings.diff_playlist_id)
-    existing_track_ids = list(diff_playlist['tracks'].keys())
+    existing_track_ids = diff_playlist['track_ids']
 
     new_track_ids = []
     for _, new_tracks_in_playlist in new_tracks_diff.items():
-        for new_track in new_tracks_in_playlist:
-            if new_track['id'] not in existing_track_ids and new_track['id'] not in all_stored_track_ids:
-                new_track_ids.append(f"spotify:track:{new_track['id']}")
+        for new_track_id in new_tracks_in_playlist:
+            if new_track_id not in existing_track_ids and new_track_id not in all_stored_track_ids:
+                new_track_ids.append(f"spotify:track:{new_track_id}")
 
     if len(new_track_ids) > 99:
         print("WARN: New tracks are more then 100. Pagination not implemented yet...")

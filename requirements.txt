@@ -4,3 +4,4 @@ python-dotenv
 pydantic-settings
 requests
 pymongo
+python-multipart

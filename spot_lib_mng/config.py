@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     mongodb_port: int
     db_name: str
 
+    tracks_collection_name: str
     playlist_collection_name: str
     diff_collection_name: str
     most_listened_collection_name: str
