@@ -54,18 +54,3 @@ def latest_playlist_states(amount: int = 1):
 def tracks_by_ids(ids: str):
     id_list = ids.split(',')
     return find_many(settings.tracks_collection_name, {'_id': {'$in': id_list}})
-
-# @router.get("/user_data", status_code=HTTP_200_OK, tags=["spotify"])
-# def read_spotify_user_data():
-#     return retrieve_spotify_user_data()
-#
-#
-# @router.get("/user_playlists", status_code=HTTP_200_OK, tags=["spotify"])
-# def read_spotify_user_playlists():
-#     playlists_count, tracks_count = get_current_state_of_spotify_playlists()
-#     return {'amount_of_playlists': playlists_count, 'total_amount_of_tracks_in_playlists': tracks_count}
-#
-#
-# @router.get("/create_diff", status_code=HTTP_201_CREATED, tags=["spotify"])
-# def create_diff_from_latest_playlist_state():
-#     create_diff_between_latest_playlist_states()

@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     most_listened_collection_name: str
     token_collection_name: str
 
-    temp_access_token: str
-
     model_config = SettingsConfigDict(env_file=".env")
 
 

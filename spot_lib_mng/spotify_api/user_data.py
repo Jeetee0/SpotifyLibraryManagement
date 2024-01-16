@@ -59,6 +59,7 @@ def get_favorite_artists(access_token: str, term: str):
         artist['spotify_url'] = item['external_urls']['spotify']
         artist['genres'] = item['genres']
         artist['popularity'] = item['popularity']
+        artist['image_url'] = item['images'][0]['url']
         long_term_artists.append(artist)
     return long_term_artists
 
@@ -79,6 +80,7 @@ def get_favorite_tracks(access_token: str, term: str):
         track['duration_ms'] = item['duration_ms']
         track['spotify_url'] = item['external_urls']['spotify']
         track['isrc'] = item['external_ids']['isrc']
+        track['image_url'] = item['album']['images'][0]['url']
 
         for artist in item['artists']:
             track['artists'].append(artist['name'])
@@ -160,7 +162,7 @@ def get_spotify_playlist_by_id(access_token: str, spotify_playlist_id: str):
     }
     playlist = retrieve_all_tracks_for_playlist(playlist, json['tracks'], access_token)
     print(
-        f"\t\tRetrieved data for playlist '{playlist['name']}' - '{playlist['id']}' with '{len(playlist['track_ids'])}' tracks")
+        f"\tRetrieved data for playlist '{playlist['name']}' - '{playlist['id']}' with '{len(playlist['track_ids'])}' tracks")
     return playlist, len(playlist['track_ids'])
 
 
@@ -178,7 +180,8 @@ def retrieve_all_tracks_for_playlist(playlist: dict, current_tracks: list, acces
                 'popularity': track['track']['popularity'],
                 'duration_ms': track['track']['duration_ms'],
                 'spotify_url': track['track']['external_urls']['spotify'],
-                'isrc': track['track']['external_ids']['isrc']
+                'isrc': track['track']['external_ids']['isrc'],
+                'image_url': track['track']['album']['images'][0]['url']
             }
             for artist in track['track']['artists']:
                 new_track['artists'].append({'id': artist['id'], 'name': artist['name']})

@@ -18,7 +18,6 @@ SCOPE = settings.spotify_scope
 CLIENT_ID = settings.spotify_client_id
 SECRET = settings.spotify_client_secret
 REDIRECT_URI = settings.spotify_redirect_uri
-ACCESS_TOKEN = settings.temp_access_token
 
 
 def make_test_call(token: str) -> bool:
