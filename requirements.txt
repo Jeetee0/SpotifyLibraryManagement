@@ -3,5 +3,5 @@ uvicorn[standard]
 python-dotenv
 pydantic-settings
 requests
-pymongo
+pymongo[srv]
 python-multipart
