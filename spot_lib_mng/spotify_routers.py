@@ -115,7 +115,22 @@ def discover(genres: str, artists: str, tracks: str,
              min_popularity: int = None, max_popularity: int = None, target_popularity: int = None,
              min_tempo: int = None, max_tempo: int = None, target_tempo: int = None):
     # todo validate fields
-    return discover_new_tracks(genres, artists, tracks, limit, market)
+    parameter_dict = {
+        'seed_genres': genres,
+        'seed_artists': artists,
+        'seed_tracks': tracks,
+
+        'limit': limit,
+        'market': market,
+
+        'min_popularity': min_popularity,
+        'max_popularity': max_popularity,
+        'target_popularity': target_popularity,
+        'min_tempo': min_tempo,
+        'max_tempo': max_tempo,
+        'target_tempo': target_tempo
+    }
+    return discover_new_tracks(parameter_dict)
 
 
 @router.post("/add_to_default_playlists", status_code=HTTP_200_OK, tags=["spotify"])

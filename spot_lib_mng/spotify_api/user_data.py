@@ -302,26 +302,20 @@ def classify_spotify_playlist_with_genres(playlist_id: str, update_in_db=True, e
     return result
 
 
-def discover_new_tracks(genres: str, artists: str, tracks: str, limit: int, market: str = None):
+def discover_new_tracks(query_strings: dict):
     access_token = get_valid_access_token()['access_token']
-    query_strings = {
-        'limit': limit,
-        'market': market,
 
-        'seed_artists': convert_query_param_string(artists),
-        'seed_genres': convert_query_param_string(genres),
-        'seed_tracks': convert_query_param_string(tracks),
-
-
-    }
-    query_strings = {k: v for k, v in query_strings.items() if v is not None}
+    # remove none values
+    query_strings = {k: v for k, v in query_strings.items() if v is not None and v is not ""}
 
     url = settings.spotify_recommendations_url + '?'
     for query_string_key in query_strings:
         url += f"{query_string_key}={query_strings[query_string_key]}&"
+    url = url[:-1]
 
     response_json = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
     return retrieve_all_tracks_for_playlist({}, response_json['tracks'], access_token, complete_tracks=True)
+
 
 ########################## usability ###################################
 
