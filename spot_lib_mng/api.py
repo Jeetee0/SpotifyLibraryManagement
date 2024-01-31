@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from spot_lib_mng.config import settings
 from spot_lib_mng import spotify_routers
-from spot_lib_mng.spotify_api.token import get_access_token
+from spot_lib_mng.spotify_api.token import get_new_access_token_from_spotify
 
 app = FastAPI(title="Spotify Library Management Service",
                version="1.0.0",

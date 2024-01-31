@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timedelta
 import json
 import urllib.parse
 
@@ -34,7 +34,10 @@ def count_documents(collection_name: str, query: dict) -> int:
     return db[collection_name].count_documents(query)
 
 
-def find_one(collection_name: str, query: dict) -> dict:
+def find_one(collection_name: str, query: dict, exclude_metadata=False) -> dict:
+    if exclude_metadata:
+        return db[collection_name].find_one(query, {'_id': False, 'created_at': False, 'created_by': False,
+                                                    'modified_at': False, 'modified_by': False})
     return db[collection_name].find_one(query)
 
 
@@ -62,12 +65,13 @@ def find_max(collection_name: str, attribute_name: str, limit: int):
 def update_one(collection_name: str, query: dict, update: dict):
     collection = db[collection_name]
 
-    update['modified_at'] = datetime.datetime.utcnow()
+    update['modified_at'] = datetime.utcnow()
     update['modified_by'] = settings.modifier
     created = {
-        'created_at': datetime.datetime.utcnow(),
+        'created_at': datetime.utcnow(),
         'created_by': settings.modifier
     }
+
     result = collection.update_one(query, {'$set': update, '$setOnInsert': created}, upsert=True)
     if result.modified_count == 1:
         return True
@@ -86,6 +90,7 @@ def get_access_token():
 
 def store_access_token(token: dict):
     token['_id'] = TOKEN_ID
+    token['expiry_date'] = datetime.utcnow() + timedelta(0, token['expires_in'] - 5)
     if not get_access_token():
         insert_one(settings.token_collection_name, token)
     else:
@@ -110,21 +115,19 @@ def find_artists_for_genre(genre: str):
     return matched_artists
 
 
-def find_all_genres():
-    artists = find_many(settings.artists_collection_name, {})
+def find_all_artists_and_genres():
+    artists = find_many(settings.artists_collection_name, {}, select_dict={'_id': 0})
     genres = []
     for artist in artists:
         genres.extend(artist['genres'])
 
-    return sorted(list(dict.fromkeys(genres)))
+    return {
+        'artists': sorted(artists, key=lambda x: x['name']),
+        'genres': sorted(list(dict.fromkeys(genres)))
+    }
 
 
 def find_all_tracks():
     tracks = find_many(settings.tracks_collection_name, {})
 
     return sorted(tracks, key=lambda x: x['name'])
-
-
-def find_all_artists():
-    artists = find_many(settings.artists_collection_name, {}, select_dict={'_id': 0, 'id': 1, 'name': 1})
-    return sorted(artists, key=lambda x: x['name'])

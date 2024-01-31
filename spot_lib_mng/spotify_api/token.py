@@ -33,7 +33,7 @@ def make_test_call(token: str) -> bool:
     return False
 
 
-def get_access_token():
+def get_new_access_token_from_spotify():
     auth_headers = {
         "client_id": CLIENT_ID,
         "response_type": "code",
@@ -69,9 +69,10 @@ def evaluate_spotify_return_code(code: str):
 def get_valid_access_token():
     token = database.get_access_token()
     if not token:
-        get_access_token()
+        get_new_access_token_from_spotify()
         raise HTTPException(status_code=500,
                             detail="Token was not in DB. Will trigger auth process. Please try again in a moment.")
+
     if token and 'expiry_date' in token and datetime.utcnow() < token['expiry_date']:
         return token
 
