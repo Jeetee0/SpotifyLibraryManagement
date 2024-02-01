@@ -139,7 +139,12 @@ def track_features(track_id: str):
 def discover(genres: str, artists: str, tracks: str,
              limit: int = 20, market: str = None,
              min_popularity: int = None, max_popularity: int = None, target_popularity: int = None,
-             min_tempo: int = None, max_tempo: int = None, target_tempo: int = None):
+             min_tempo: int = None, max_tempo: int = None, target_tempo: int = None,
+             min_energy: float = None, max_energy: float = None, target_energy: int = None,
+             min_key: int = None, max_key: int = None, target_key: int = None,
+             min_danceability: float = None, max_danceability: float = None, target_danceability: float = None,
+             min_mode: int = None, max_mode: int = None, target_mode: int = None
+             ):
     # todo validate fields
     parameter_dict = {
         'seed_genres': genres,
@@ -154,7 +159,19 @@ def discover(genres: str, artists: str, tracks: str,
         'target_popularity': target_popularity,
         'min_tempo': min_tempo,
         'max_tempo': max_tempo,
-        'target_tempo': target_tempo
+        'target_tempo': target_tempo,
+        'min_energy': min_energy,
+        'max_energy': max_energy,
+        'target_energy': target_energy,
+        'min_key': min_key,
+        'max_key': max_key,
+        'target_key': target_key,
+        'min_danceability': min_danceability,
+        'max_danceability': max_danceability,
+        'target_danceability': target_danceability,
+        'min_mode': min_mode,
+        'max_mode': max_mode,
+        'target_mode': target_mode
     }
     return discover_new_tracks(parameter_dict)
 
