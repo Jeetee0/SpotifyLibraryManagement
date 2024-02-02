@@ -87,8 +87,14 @@ def tracks():
 
 
 @router.get("/artist_by_id", status_code=HTTP_200_OK, tags=["artist"])
-def artists_by_names(artist_id: str):
+def artist_by_id(artist_id: str):
     return find_one(settings.artists_collection_name, {'id': artist_id}, exclude_metadata=True)
+
+
+@router.get("/artists_by_ids", status_code=HTTP_200_OK, tags=["artist"])
+def artists_by_ids(artist_ids: str):
+    regex_list = [re.compile(term, re.IGNORECASE) for term in artist_ids.split(',')]
+    return find_many(settings.artists_collection_name, {'id': {'$in': regex_list}}, exclude_metadata=True)
 
 
 @router.get("/artists_by_name", status_code=HTTP_200_OK, tags=["artist"])
