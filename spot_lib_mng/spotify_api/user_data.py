@@ -330,7 +330,7 @@ def discover_new_tracks(query_strings: dict):
             value = convert_query_param_string(value)
         url += f"{query_string_key}={value}&"
     url = url[:-1]
-    
+
     response_json = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
     if 'tracks' not in response_json or not response_json['tracks']:
         print("ERROR: No 'tracks' key was present:")
