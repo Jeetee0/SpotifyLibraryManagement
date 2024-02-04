@@ -4,11 +4,10 @@
 # API for Spotify Library Management
 
 from fastapi import FastAPI
-from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 from spot_lib_mng.config import settings
 from spot_lib_mng import spotify_routers
-from spot_lib_mng.spotify_api.token import get_new_access_token_from_spotify
 
 app = FastAPI(title="Spotify Library Management Service",
                version="1.0.0",
@@ -18,6 +17,7 @@ app = FastAPI(title="Spotify Library Management Service",
 origins = [
     "http://localhost",
     "http://localhost:5173",
+    "https://jeetee0.github.io"
 ]
 
 app.add_middleware(
@@ -26,6 +26,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=['Access-Control-Allow-Origin']
 )
 
 app.include_router(spotify_routers.router, prefix="/spotify")
