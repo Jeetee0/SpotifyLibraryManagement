@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     spotify_top_user_tracks_url: str
     spotify_user_artist_following_url: str
     spotify_recommendations_url: str
+    spotify_search_url: str
 
     spotify_client_id: str
     spotify_client_secret: str

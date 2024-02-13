@@ -10,6 +10,8 @@ from pymongo.server_api import ServerApi
 db = None
 TOKEN_ID = 'token'
 
+DB_METADATA = {'_id': False, 'created_at': False, 'created_by': False, 'modified_at': False, 'modified_by': False}
+
 
 def get_db():
     global db
@@ -36,8 +38,7 @@ def count_documents(collection_name: str, query: dict) -> int:
 
 def find_one(collection_name: str, query: dict, exclude_metadata=False) -> dict:
     if exclude_metadata:
-        return db[collection_name].find_one(query, {'_id': False, 'created_at': False, 'created_by': False,
-                                                    'modified_at': False, 'modified_by': False})
+        return db[collection_name].find_one(query, DB_METADATA)
     return db[collection_name].find_one(query)
 
 
@@ -46,8 +47,7 @@ def find_many(collection_name: str, query: dict, select_dict=None, exclude_metad
         cursor = db[collection_name].find(query, select_dict)
     elif exclude_metadata:
         cursor = db[collection_name].find(query,
-                                          {'_id': False, 'created_at': False, 'created_by': False, 'modified_at': False,
-                                           'modified_by': False})
+                                          DB_METADATA)
     else:
         cursor = db[collection_name].find(query)
 
@@ -59,7 +59,7 @@ def remove_one(collection_name: str, query: dict) -> None:
 
 
 def find_max(collection_name: str, attribute_name: str, limit: int):
-    return db[collection_name].find().sort({attribute_name: -1}).limit(limit)
+    return db[collection_name].find({}, DB_METADATA).sort({attribute_name: -1}).limit(limit)
 
 
 def update_one(collection_name: str, query: dict, update: dict):

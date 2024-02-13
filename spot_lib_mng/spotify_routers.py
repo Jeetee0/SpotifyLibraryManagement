@@ -3,16 +3,17 @@ import re
 
 from bson.json_util import dumps
 from fastapi import APIRouter
-from starlette.status import HTTP_200_OK, HTTP_204_NO_CONTENT
+from starlette.status import HTTP_200_OK
 
 from spot_lib_mng.config import settings
 from spot_lib_mng.database import store_access_token, find_many, find_latest_documents, find_artists_for_genre, \
     find_all_tracks, find_all_artists_and_genres, find_one
 from spot_lib_mng.spotify_api.token import get_new_access_token_from_spotify, evaluate_spotify_return_code
 from spot_lib_mng.spotify_api.user_data import retrieve_spotify_user_data, get_current_state_of_spotify_playlists, \
-    create_diff_between_latest_playlist_states, classify_spotify_playlist_with_genres, exec_manual_script, \
+    create_diff_between_latest_playlist_states, classify_spotify_playlist_with_genres, \
     discover_new_tracks, add_to_default_playlist, retrieve_track_features, get_top_tracks_for_artist, \
-    get_related_artists, get_followed_artists
+    get_related_artists, get_followed_artists, start_spotify_search, import_item_from_spotify, \
+    find_artists_with_highest_popularity_and_most_followers
 
 router = APIRouter()
 
@@ -182,6 +183,24 @@ def discover(genres: str, artists: str, tracks: str,
     return discover_new_tracks(parameter_dict)
 
 
-@router.get("/exec_manual_script", status_code=HTTP_200_OK, tags=["spotify"])
-def manual_exec():
-    return exec_manual_script()
+@router.get("/general_search", status_code=HTTP_200_OK, tags=["spotify"])
+def search_at_spotify(term: str, type: str):
+    if term == "":
+        return {}
+    if type != "artist" and type != "track" and type != "playlist":
+        return {}
+    return start_spotify_search(term, type)
+
+
+@router.post("/import_item", status_code=HTTP_200_OK, tags=["spotify"])
+def import_item(id: str, type: str):
+    if id == "":
+        return {}
+    if type != "artist" and type != "track" and type != "playlist":
+        return {}
+    return import_item_from_spotify(id, type)
+
+
+@router.get("/highest_artist_stats", status_code=HTTP_200_OK, tags=["artist"])
+def highest_artist_stats():
+    return find_artists_with_highest_popularity_and_most_followers()

@@ -1,10 +1,6 @@
 import csv
 import datetime
-import json
 from pathlib import Path
-from bson.json_util import dumps
-from urllib.request import urlretrieve
-from urllib.parse import quote, urlencode
 
 import requests
 from fastapi import HTTPException
@@ -17,6 +13,8 @@ playlist_url_key_limitations = "description,name,id,owner,tracks(items(track(id,
 tracks_url_key_limitations = "items(track(id,album,artists,duration_ms,external_ids,external_urls,name,popularity)),next"
 db = database.get_db()
 total_tracks = 0
+imported_artist_ids = []
+imported_track_ids = []
 
 
 def retrieve_spotify_user_data():
@@ -118,7 +116,7 @@ def get_spotify_playlist_by_id(access_token: str, spotify_playlist_id: str):
         'track_ids': [],
         'spotify_url': json['external_urls']['spotify']
     }
-    if 'images' in json:
+    if 'images' in json and json['images']:
         playlist['image_url'] = json['images'][0]['url']
     playlist = retrieve_all_tracks_for_playlist(playlist, json['tracks'], access_token, complete_tracks_and_store=False)
     print(
@@ -126,12 +124,13 @@ def get_spotify_playlist_by_id(access_token: str, spotify_playlist_id: str):
     return playlist, len(playlist['track_ids'])
 
 
-def retrieve_all_tracks_for_playlist(playlist: dict, current_tracks: list, access_token: str = None, complete_tracks_and_store=False):
+def retrieve_all_tracks_for_playlist(playlist: dict, current_tracks: list, access_token: str = None,
+                                     complete_tracks_and_store=False):
     if complete_tracks_and_store:
         playlist['tracks'] = []
 
     while True:
-        if 'items' in current_tracks: # in playlists there is another layer with 'items'. also needed for pagination
+        if 'items' in current_tracks:  # in playlists there is another layer with 'items'. also needed for pagination
             items = current_tracks['items']
         else:
             items = current_tracks
@@ -150,7 +149,8 @@ def retrieve_all_tracks_for_playlist(playlist: dict, current_tracks: list, acces
 
         # track amount limit per call is 100, so check for more tracks
         if 'next' not in current_tracks or not current_tracks['next']:
-            playlist['amount_of_tracks'] = len(playlist['tracks']) if complete_tracks_and_store else len(playlist['track_ids'])
+            playlist['amount_of_tracks'] = len(playlist['tracks']) if complete_tracks_and_store else len(
+                playlist['track_ids'])
             return playlist
 
         # url = f"{current_tracks['next']}&fields={tracks_url_key_limitations}"
@@ -382,6 +382,41 @@ def get_followed_artists():
         resulting_artists.append(store_spotify_artist_data_in_db(artist))
     return resulting_artists
 
+
+def start_spotify_search(term: str, type: str):
+    access_token = get_valid_access_token()['access_token']
+    url = f"{settings.spotify_search_url}?q={term}&type={type}&limit=20"
+    response = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+    return_items = []
+    if type == "track":
+        for track in response['tracks']['items']:
+            return_items.append(extract_track_and_store_in_db(track, access_token, store=False))
+    elif type == "artist":
+        for artist in response['artists']['items']:
+            return_items.append(store_spotify_artist_data_in_db(artist, store=False))
+    elif type == "playlist":
+        return_items = response['playlists']['items']
+    return return_items
+
+
+def import_item_from_spotify(id: str, type: str):
+    access_token = get_valid_access_token()['access_token']
+    print("importing...")
+    if type == "track":
+        url = f"{settings.spotify_track_url}/{id}"
+        to_import = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+        return extract_track_and_store_in_db(to_import, access_token, store=True)
+    elif type == "artist":
+        url = f"{settings.spotify_artist_url}/{id}"
+        to_import = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+        return store_spotify_artist_data_in_db(to_import, store=True)
+    elif type == "playlist":
+        url = f"{settings.spotify_playlist_url}/{id}"
+        playlist_data = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+        return retrieve_all_tracks_for_playlist({}, playlist_data['tracks'], access_token,
+                                                complete_tracks_and_store=True)
+
+
 ########################## usability ###################################
 
 
@@ -390,8 +425,9 @@ def convert_query_param_string(incoming: str):
 
 
 def extract_track_and_store_in_db(track: dict, access_token: str, store=False):
+    track_id = track['id']
     new_track = {
-        'id': track['id'],
+        'id': track_id,
         'name': track['name'],
         'artists': [],
         'album_name': track['album']['name'],
@@ -406,17 +442,22 @@ def extract_track_and_store_in_db(track: dict, access_token: str, store=False):
 
         if store:
             # also persist artist
-            url = f"{settings.spotify_artist_url}/{artist['id']}"
-            artist_json = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
-            store_spotify_artist_data_in_db(artist_json)
+            if artist['id'] not in imported_artist_ids:
+                url = f"{settings.spotify_artist_url}/{artist['id']}"
+                artist_json = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+                store_spotify_artist_data_in_db(artist_json)
     if store:
-        database.update_one(settings.tracks_collection_name, {'_id': new_track['id']}, new_track)
+        if track_id not in imported_track_ids:
+            print(f"INFO: Inserting track '{track_id}'")
+            database.update_one(settings.tracks_collection_name, {'_id': track_id}, new_track)
+            imported_track_ids.append(track_id)
     return remove_metadata(new_track)
 
 
 def store_spotify_artist_data_in_db(artist_json: dict, store=True):
+    artist_id = artist_json['id']
     db_artist = {
-        'id': artist_json['id'],
+        'id': artist_id,
         'name': artist_json['name'],
         'genres': artist_json['genres'],
         'spotify_url': artist_json['external_urls']['spotify'],
@@ -426,7 +467,10 @@ def store_spotify_artist_data_in_db(artist_json: dict, store=True):
     if artist_json['images']:
         db_artist['image_url'] = artist_json['images'][0]['url']
     if store:
-        database.update_one(settings.artists_collection_name, {'id': artist_json['id']}, db_artist)
+        if artist_id not in imported_artist_ids:
+            print(f"INFO: Inserting artist '{artist_id}'")
+            database.update_one(settings.artists_collection_name, {'id': artist_id}, db_artist)
+            imported_artist_ids.append(artist_id)
     return db_artist
 
 
@@ -439,9 +483,11 @@ def exec_get_request_with_headers_and_token_and_return_data(url: str, access_tok
     response = requests.get(url, headers=headers)
     if response.status_code == 429:
         print(response.headers)
-        raise HTTPException(status_code=429, detail=f"Too many requests to spotify API. Retry again in: {int(response.headers['retry-after'])/60} mins")
+        raise HTTPException(status_code=429,
+                            detail=f"Too many requests to spotify API. Retry again in: {int(response.headers['retry-after']) / 60} mins")
     elif response.status_code not in [200, 204]:
-        print(f"ERROR - request to '{url}' was not successful. Response from external source: '{response.status_code}' - {response.text}")
+        print(
+            f"ERROR - request to '{url}' was not successful. Response from external source: '{response.status_code}' - {response.text}")
         return {}
         # raise HTTPException(status_code=500, detail=f"Request to {url} was not successful. Error: {response.status_code} - {response.text}")
 
@@ -478,44 +524,8 @@ def remove_metadata(db_item, with_mongo_id=False):
     return db_item
 
 
-
-# dev manual
-def exec_manual_script():
-    return_data = {}
-    data = json.loads(dumps(database.find_max(settings.artists_collection_name, "popularity", 5)))
-    popu_list = []
-    for element in data:
-        popu_list.append({
-            'popularity': element['popularity'],
-            'name': element['name'],
-            'followers': element['followers'],
-            'genres': element['genres']
-        })
-    return_data['highest_popularity'] = popu_list
-
-    data = json.loads(dumps(database.find_max(settings.artists_collection_name, "followers", 5)))
-    follow_list = []
-    for element in data:
-        follow_list.append({
-            'popularity': element['popularity'],
-            'name': element['name'],
-            'followers': element['followers'],
-            'genres': element['genres']
-        })
-    return_data['highest_followers'] = follow_list
-    return return_data
-    # token = get_valid_access_token()
-    # access_token = token['access_token']
-    #
-    # with open(Path("./spotify_playlist_ids_2.csv")) as csv_file:
-    #     csv_reader = csv.reader(csv_file, delimiter=';')
-    #     next(csv_reader, None)  # skip the headers
-    #     for row in csv_reader:
-    #         playlist_name = row[0]
-    #         folder_name = row[1]
-    #         spotify_playlist_id = row[2]
-    #         if not playlist_name:
-    #             continue
-    #
-    #         url = f"http://localhost:9093/spotify/playlist_genre_classification?playlist_id={spotify_playlist_id}"
-    #         response_data = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+def find_artists_with_highest_popularity_and_most_followers():
+    return {
+        'highest_popularity': list(database.find_max(settings.artists_collection_name, "popularity", 20)),
+        'most_followers': list(database.find_max(settings.artists_collection_name, "followers", 20))
+    }
