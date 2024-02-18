@@ -7,10 +7,16 @@ from pymongo import MongoClient
 from spot_lib_mng.config import settings
 from pymongo.server_api import ServerApi
 
+from spot_lib_mng.utils.requests import exec_get_request_with_headers_and_token_and_return_data
+from spot_lib_mng.utils.utils import remove_metadata
+
 db = None
 TOKEN_ID = 'token'
 
 DB_METADATA = {'_id': False, 'created_at': False, 'created_by': False, 'modified_at': False, 'modified_by': False}
+
+imported_artist_ids = []
+imported_track_ids = []
 
 
 def get_db():
@@ -131,3 +137,53 @@ def find_all_tracks():
     tracks = find_many(settings.tracks_collection_name, {})
 
     return sorted(tracks, key=lambda x: x['name'])
+
+
+def extract_track_and_store_in_db(track: dict, access_token: str, store=False):
+    track_id = track['id']
+    new_track = {
+        'id': track_id,
+        'name': track['name'],
+        'artists': [],
+        'album_name': track['album']['name'],
+        'popularity': track['popularity'],
+        'duration_ms': track['duration_ms'],
+        'spotify_url': track['external_urls']['spotify'],
+        'isrc': track['external_ids']['isrc'],
+        'image_url': track['album']['images'][0]['url']
+    }
+    for artist in track['artists']:
+        new_track['artists'].append({'id': artist['id'], 'name': artist['name']})
+
+        if store:
+            # also persist artist
+            if artist['id'] not in imported_artist_ids:
+                url = f"{settings.spotify_artist_url}/{artist['id']}"
+                artist_json = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+                store_spotify_artist_data_in_db(artist_json)
+    if store:
+        if track_id not in imported_track_ids:
+            print(f"INFO: Inserting track '{track_id}'")
+            update_one(settings.tracks_collection_name, {'_id': track_id}, new_track)
+            imported_track_ids.append(track_id)
+    return remove_metadata(new_track)
+
+
+def store_spotify_artist_data_in_db(artist_json: dict, store=True):
+    artist_id = artist_json['id']
+    db_artist = {
+        'id': artist_id,
+        'name': artist_json['name'],
+        'genres': artist_json['genres'],
+        'spotify_url': artist_json['external_urls']['spotify'],
+        'followers': artist_json['followers']['total'],
+        'popularity': artist_json['popularity'],
+    }
+    if artist_json['images']:
+        db_artist['image_url'] = artist_json['images'][0]['url']
+    if store:
+        if artist_id not in imported_artist_ids:
+            print(f"INFO: Inserting artist '{artist_id}'")
+            update_one(settings.artists_collection_name, {'id': artist_id}, db_artist)
+            imported_artist_ids.append(artist_id)
+    return db_artist

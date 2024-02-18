@@ -5,17 +5,18 @@ from bson.json_util import dumps
 from fastapi import APIRouter
 from starlette.status import HTTP_200_OK
 
+from spot_lib_mng import database
 from spot_lib_mng.config import settings
-from spot_lib_mng.database import store_access_token, find_many, find_latest_documents, find_artists_for_genre, \
-    find_all_tracks, find_all_artists_and_genres, find_one
 from spot_lib_mng.spotify_api.token import get_new_access_token_from_spotify, evaluate_spotify_return_code
-from spot_lib_mng.spotify_api.user_data import retrieve_spotify_user_data, get_current_state_of_spotify_playlists, \
-    create_diff_between_latest_playlist_states, classify_spotify_playlist_with_genres, \
-    discover_new_tracks, add_to_default_playlist, retrieve_track_features, get_top_tracks_for_artist, \
-    get_related_artists, get_followed_artists, start_spotify_search, import_item_from_spotify, \
-    find_artists_with_highest_popularity_and_most_followers, update_latest_track_playlists
+from spot_lib_mng.spotify_api.user_data import retrieve_spotify_user_data, start_spotify_search, import_item_from_spotify
+from spot_lib_mng.spotify_api.tracks import retrieve_track_features, discover_new_tracks
+from spot_lib_mng.spotify_api.playlists import get_current_state_of_spotify_playlists, add_to_default_playlist, \
+    classify_spotify_playlist_with_genres, update_latest_track_playlists, create_diff_between_latest_playlist_states
+from spot_lib_mng.spotify_api.artists import find_artists_with_highest_popularity_and_most_followers, \
+    get_top_tracks_for_artist, get_related_artists, get_followed_artists
 
 router = APIRouter()
+db = database.get_db()
 
 
 @router.get("/request_access_token", status_code=HTTP_200_OK, tags=["login"])
@@ -27,7 +28,7 @@ def request_access_token():
             description="Is used by Spotify and should not be called by a user")
 def retrieve_code(code: str):
     token = evaluate_spotify_return_code(code)
-    store_access_token(token)
+    database.store_access_token(token)
     return {'status': 'SUCCESS', 'info': "Token was stored in DB. You can now retrieve your personal spotify data"}
 
 
@@ -43,23 +44,23 @@ def trigger_complete_data_retrieval():
 
 @router.get("/latest_user_data_states", status_code=HTTP_200_OK, tags=["spotify"])
 def latest_user_data_states(amount: int = 1):
-    return json.loads(dumps(find_latest_documents(settings.most_listened_collection_name, amount)))
+    return json.loads(dumps(database.find_latest_documents(settings.most_listened_collection_name, amount)))
 
 
 @router.get("/latest_playlist_states", status_code=HTTP_200_OK, tags=["playlist"])
 def latest_playlist_states(amount: int = 1):
-    return json.loads(dumps(find_latest_documents(settings.playlist_collection_name, amount)))
+    return json.loads(dumps(database.find_latest_documents(settings.playlist_collection_name, amount)))
 
 
 @router.get("/latest_diff_states", status_code=HTTP_200_OK, tags=["playlist"])
 def latest_diff_states(amount: int = 1):
-    return json.loads(dumps(find_latest_documents(settings.diff_collection_name, amount)))
+    return json.loads(dumps(database.find_latest_documents(settings.diff_collection_name, amount)))
 
 
 @router.get("/playlists_by_ids", status_code=HTTP_200_OK, tags=["playlist"])
 def playlists_by_ids(ids: str):
     id_list = ids.split(',')
-    latest_playlists = json.loads(dumps(find_latest_documents(settings.playlist_collection_name, 1)))[0]
+    latest_playlists = json.loads(dumps(database.find_latest_documents(settings.playlist_collection_name, 1)))[0]
 
     selected_playlists = []
     for playlist_key in latest_playlists['playlists']:
@@ -85,24 +86,24 @@ def add_to_playlist(playlist_index, track_id):
 
 @router.get("/artists_and_genres", status_code=HTTP_200_OK, tags=["artist"])
 def tracks():
-    return find_all_artists_and_genres()
+    return database.find_all_artists_and_genres()
 
 
 @router.get("/artist_by_id", status_code=HTTP_200_OK, tags=["artist"])
 def artist_by_id(artist_id: str):
-    return find_one(settings.artists_collection_name, {'id': artist_id}, exclude_metadata=True)
+    return database.find_one(settings.artists_collection_name, {'id': artist_id}, exclude_metadata=True)
 
 
 @router.get("/artists_by_ids", status_code=HTTP_200_OK, tags=["artist"])
 def artists_by_ids(artist_ids: str):
     regex_list = [re.compile(term, re.IGNORECASE) for term in artist_ids.split(',')]
-    return find_many(settings.artists_collection_name, {'id': {'$in': regex_list}}, exclude_metadata=True)
+    return database.find_many(settings.artists_collection_name, {'id': {'$in': regex_list}}, exclude_metadata=True)
 
 
 @router.get("/artists_by_name", status_code=HTTP_200_OK, tags=["artist"])
 def artists_by_names(names: str):
     regex_list = [re.compile(term, re.IGNORECASE) for term in names.split(',')]
-    return find_many(settings.artists_collection_name, {'name': {'$in': regex_list}}, exclude_metadata=True)
+    return database.find_many(settings.artists_collection_name, {'name': {'$in': regex_list}}, exclude_metadata=True)
 
 
 @router.get("/artist_top_tracks", status_code=HTTP_200_OK, tags=["artist"])
@@ -122,18 +123,18 @@ def followed_artists():
 
 @router.get("/artists_for_genre", status_code=HTTP_200_OK, tags=["artist"])
 def get_artists_for_genre(genre: str):
-    return find_artists_for_genre(genre)
+    return database.find_artists_for_genre(genre)
 
 
 @router.get("/tracks", status_code=HTTP_200_OK, tags=["track"])
 def tracks():
-    return find_all_tracks()
+    return database.find_all_tracks()
 
 
 @router.get("/tracks_by_ids", status_code=HTTP_200_OK, tags=["track"])
 def tracks_by_ids(ids: str):
     id_list = ids.split(',')
-    result = find_many(settings.tracks_collection_name, {'_id': {'$in': id_list}})
+    result = database.find_many(settings.tracks_collection_name, {'_id': {'$in': id_list}})
     sorted_data = sorted(result, key=lambda x: id_list.index(x['_id']), reverse=True)
     return sorted_data
 
