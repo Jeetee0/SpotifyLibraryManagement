@@ -13,7 +13,7 @@ from spot_lib_mng.spotify_api.user_data import retrieve_spotify_user_data, get_c
     create_diff_between_latest_playlist_states, classify_spotify_playlist_with_genres, \
     discover_new_tracks, add_to_default_playlist, retrieve_track_features, get_top_tracks_for_artist, \
     get_related_artists, get_followed_artists, start_spotify_search, import_item_from_spotify, \
-    find_artists_with_highest_popularity_and_most_followers
+    find_artists_with_highest_popularity_and_most_followers, update_latest_track_playlists
 
 router = APIRouter()
 
@@ -36,6 +36,7 @@ def trigger_complete_data_retrieval():
     retrieve_spotify_user_data()
     playlists_count, tracks_count = get_current_state_of_spotify_playlists()
     create_diff_between_latest_playlist_states()
+    update_latest_track_playlists()
     return {"status": "success", 'amount_of_playlists': playlists_count,
             'total_amount_of_tracks_in_playlists': tracks_count}
 

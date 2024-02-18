@@ -1,5 +1,5 @@
 import csv
-import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -20,7 +20,7 @@ imported_track_ids = []
 def retrieve_spotify_user_data():
     # once per day is enough
     latest_document = database.find_latest_documents(settings.most_listened_collection_name, 1)
-    if latest_document and latest_document[0]['created_at'].day == datetime.datetime.today().day:
+    if latest_document and latest_document[0]['created_at'].day == datetime.today().day:
         print("WARN: Skipping user data export because latest state is from today...")
         return
 
@@ -43,7 +43,7 @@ def retrieve_spotify_user_data():
 
     print(f"SUCCESS: Inserting 'most listened' user data into collection '{settings.most_listened_collection_name}'")
     database.insert_one(settings.most_listened_collection_name, {
-        'created_at': datetime.datetime.utcnow(),
+        'created_at': datetime.utcnow(),
         'created_by': settings.modifier,
         'data': user_data})
     return user_data
@@ -97,7 +97,7 @@ def get_current_state_of_spotify_playlists():
 
         print(f"SUCCESS: Inserting '{len(playlists)}' playlists to collection '{settings.playlist_collection_name}'")
         database.insert_one(settings.playlist_collection_name, {
-            'created_at': datetime.datetime.utcnow(),
+            'created_at': datetime.utcnow(),
             'created_by': settings.modifier,
             'playlists': playlists})
         return len(playlists), total_amount_of_tracks
@@ -122,6 +122,28 @@ def get_spotify_playlist_by_id(access_token: str, spotify_playlist_id: str):
     print(
         f"\tRetrieved data for playlist '{playlist['name']}' - '{playlist['id']}' with '{len(playlist['track_ids'])}' tracks")
     return playlist, len(playlist['track_ids'])
+
+
+def get_spotify_playlist_data_raw(spotify_playlist_id: str, access_token: str):
+    url = f"{settings.spotify_playlist_url}/{spotify_playlist_id}"
+    return exec_get_request_with_headers_and_token_and_return_data(url, access_token)
+
+
+def get_all_tracks_for_spotify_playlist(spotify_playlist_id: str, access_token: str):
+    playlist = get_spotify_playlist_data_raw(spotify_playlist_id, access_token)
+    gathered_tracks = []
+    current_tracks = playlist['tracks']
+    while True:
+        for track in current_tracks['items']:
+            if 'track' in track and 'id' in track['track']:
+                gathered_tracks.append(track)
+
+        # track amount limit per call is 100, so check for more tracks
+        if 'next' not in current_tracks or not current_tracks['next']:
+            return gathered_tracks
+
+        url = f"{current_tracks['next']}"
+        current_tracks = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
 
 
 def retrieve_all_tracks_for_playlist(playlist: dict, current_tracks: list, access_token: str = None,
@@ -199,9 +221,9 @@ def create_diff_between_latest_playlist_states():
             new_tracks_diff[latest_playlist['name']] = new_tracks_for_playlist
 
     if new_tracks_diff:
-        add_tracks_to_spotify_playlist(access_token, new_tracks_diff, all_stored_track_ids)
+        add_new_tracks_to_spotify_diff_playlist(access_token, new_tracks_diff, all_stored_track_ids)
         database.insert_one(settings.diff_collection_name, {
-            'created_at': datetime.datetime.utcnow(),
+            'created_at': datetime.utcnow(),
             'created_by': settings.modifier,
             'latest_playlist_state_id': latest_documents[0]['_id'],
             'earlier_playlist_state_id': latest_documents[1]['_id'],
@@ -210,7 +232,7 @@ def create_diff_between_latest_playlist_states():
     return new_tracks_diff
 
 
-def add_tracks_to_spotify_playlist(access_token: str, new_tracks_diff: dict, all_stored_track_ids: list):
+def add_new_tracks_to_spotify_diff_playlist(access_token: str, new_tracks_diff: dict, all_stored_track_ids: list):
     print(f"\tAdding new tracks to spotify diff playlist...")
 
     # check which tracks are already in playlist
@@ -248,6 +270,14 @@ def add_single_track_to_playlist(playlist_id: str, track_id: str):
     url = f"{settings.spotify_playlist_url}/{playlist_id}/tracks"
     uri = f"spotify:track:{track_id}"
     exec_post_request_with_headers_and_token(url, {'uris': [uri]}, get_valid_access_token()['access_token'])
+
+
+def add_tracks_to_playlist(playlist_id: str, track_ids: list):
+    url = f"{settings.spotify_playlist_url}/{playlist_id}/tracks"
+    uris = []
+    for track_id in track_ids:
+        uris.append(f"spotify:track:{track_id}")
+    exec_post_request_with_headers_and_token(url, {'uris': uris}, get_valid_access_token()['access_token'])
 
 
 def add_to_default_playlist(playlist_index: str, track_id: str):
@@ -417,6 +447,55 @@ def import_item_from_spotify(id: str, type: str):
                                                 complete_tracks_and_store=True)
 
 
+def update_latest_track_playlists():
+    access_token = get_valid_access_token()['access_token']
+
+    with open(Path(settings.csv_latest_tracks_playlists_path)) as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=';')
+        next(csv_reader, None)  # skip the headers
+
+        for row in csv_reader:
+            latest_playlist_id = row[0]
+            genre_classification = row[1]
+            spotify_playlist_ids = row[2]
+
+            if not latest_playlist_id:
+                continue
+
+            print(f"INFO: Updating 'Latest-{genre_classification}' playlist with id: '{latest_playlist_id}'")
+            newest_track_ids = []
+            one_month_ago = datetime.utcnow() - timedelta(days=61)
+
+            for playlist_id in spotify_playlist_ids.split(','):
+                tracks = get_all_tracks_for_spotify_playlist(playlist_id, access_token)
+                for track in tracks:
+                    track_id = track['track']['id']
+                    added_to_playlist_timestamp = datetime.strptime(track['added_at'], '%Y-%m-%dT%H:%M:%SZ')
+                    if added_to_playlist_timestamp > one_month_ago and track_id not in newest_track_ids:
+                        # print(f"\t\tTrack added: {track['track']['name']}")
+                        newest_track_ids.append(track_id)
+
+            # remove old tracks
+            tracks = get_all_tracks_for_spotify_playlist(latest_playlist_id, access_token)
+            track_ids = [track['track']['id'] for track in tracks]
+            remove_tracks_from_spotify_playlist(latest_playlist_id, track_ids, access_token)
+
+            print(f"\tAdding '{len(newest_track_ids)}' tracks")
+            add_tracks_to_playlist(latest_playlist_id, newest_track_ids)
+
+
+def remove_tracks_from_spotify_playlist(playlist_id: str, track_ids: list, access_token: str):
+    track_uris = []
+    for track_id in track_ids:
+        track_uris.append({'uri': f"spotify:track:{track_id}"})
+
+    url = f"{settings.spotify_playlist_url}/{playlist_id}/tracks"
+    json_body = {
+        'tracks': track_uris
+    }
+    exec_delete_request_with_headers_and_token(url, json_body, access_token)
+
+
 ########################## usability ###################################
 
 
@@ -487,7 +566,7 @@ def exec_get_request_with_headers_and_token_and_return_data(url: str, access_tok
                             detail=f"Too many requests to spotify API. Retry again in: {int(response.headers['retry-after']) / 60} mins")
     elif response.status_code not in [200, 204]:
         print(
-            f"ERROR - request to '{url}' was not successful. Response from external source: '{response.status_code}' - {response.text}")
+            f"ERROR - request to GET @ '{url}' was not successful. Response from external source: '{response.status_code}' - {response.text}")
         return {}
         # raise HTTPException(status_code=500, detail=f"Request to {url} was not successful. Error: {response.status_code} - {response.text}")
 
@@ -502,7 +581,22 @@ def exec_post_request_with_headers_and_token(url: str, body: dict, access_token:
 
     response = requests.post(url, json=body, headers=headers)
     if response.status_code not in [200, 201, 204]:
-        print(f"ERROR: Request to {url} was not successful...")
+        print(f"ERROR: Request to POST @ '{url}' was not successful...")
+        print(response.text)
+        return {}
+
+    return response.status_code
+
+
+def exec_delete_request_with_headers_and_token(url: str, body: dict, access_token: str):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    response = requests.delete(url, json=body, headers=headers)
+    if response.status_code not in [200, 201, 204]:
+        print(f"ERROR: Request to DELETE @ '{url}' was not successful...")
         print(response.text)
         return {}
 

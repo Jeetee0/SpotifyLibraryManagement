@@ -161,3 +161,4 @@ cython_debug/
 
 # user based
 /spotify_playlist_ids.csv
+/latest_tracks_playlists.csv

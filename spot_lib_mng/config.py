@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     spotify_playlist_link_2: str
 
     csv_playlist_ids_path: str
+    csv_latest_tracks_playlists_path: str
     diff_playlist_id: str
 
     mongodb_host: str
