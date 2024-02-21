@@ -11,14 +11,14 @@ def find_artists_with_highest_popularity_and_most_followers():
     }
 
 
-def get_favorite_artists(access_token: str, term: str):
+def get_favorite_artists(access_token: str, term: str, store: bool):
     url = f"{settings.spotify_top_user_artists_url}?time_range={term}&limit=10"
     response_data = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
 
     items = response_data['items']
     long_term_artists = []
     for item in items:
-        artist = database.store_spotify_artist_data_in_db(item)
+        artist = database.store_spotify_artist_data_in_db(item, store)
         long_term_artists.append(artist)
     return long_term_artists
 
@@ -46,14 +46,13 @@ def get_related_artists(artist_id: str):
     return artists
 
 
-def get_followed_artists():
+def get_followed_artists(access_token: str):
     url = f"{settings.spotify_user_artist_following_url}?type=artist&limit=50"
-    response = exec_get_request_with_headers_and_token_and_return_data(url, get_valid_access_token()['access_token'])
+    response = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
     artists = response['artists']['items']
     next = response['artists']['next']
     if next:
-        response = exec_get_request_with_headers_and_token_and_return_data(next,
-                                                                           get_valid_access_token()['access_token'])
+        response = exec_get_request_with_headers_and_token_and_return_data(next, access_token)
 
         artists.extend(response['artists']['items'])
     resulting_artists = []

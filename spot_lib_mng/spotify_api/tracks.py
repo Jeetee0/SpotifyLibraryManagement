@@ -1,18 +1,18 @@
 from spot_lib_mng.config import settings
-from spot_lib_mng.spotify_api.token import get_valid_access_token
 from spot_lib_mng.database import extract_track_and_store_in_db
+from spot_lib_mng.spotify_api.token import get_valid_access_token
 from spot_lib_mng.utils.requests import exec_get_request_with_headers_and_token_and_return_data
 from spot_lib_mng.utils.utils import convert_query_param_string
 
 
-def get_favorite_tracks(access_token: str, term: str):
+def get_favorite_tracks(access_token: str, term: str, store: bool):
     url = f"{settings.spotify_top_user_tracks_url}?time_range={term}&limit=10"
     response_data = exec_get_request_with_headers_and_token_and_return_data(url, access_token)
 
     items = response_data['items']
     long_term_tracks = []
     for item in items:
-        track = extract_track_and_store_in_db(item, access_token, store=True)
+        track = extract_track_and_store_in_db(item, access_token, store=store)
         long_term_tracks.append(track)
     return long_term_tracks
 

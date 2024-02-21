@@ -1,14 +1,15 @@
 import csv
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import HTTPException
 
 from spot_lib_mng import database
-from spot_lib_mng.utils import requests
 from spot_lib_mng.config import settings
 from spot_lib_mng.spotify_api.token import get_valid_access_token
 from spot_lib_mng.spotify_api.tracks import retrieve_all_tracks_for_playlist, get_all_tracks_for_spotify_playlist
+from spot_lib_mng.utils import requests
 
 
 def get_current_state_of_spotify_playlists():
@@ -17,6 +18,8 @@ def get_current_state_of_spotify_playlists():
     access_token = token['access_token']
     print(f"INFO: Exporting current state of spotify playlists for user '{settings.spotify_username}'")
     playlists = {}
+    if not os.path.exists(settings.csv_playlist_ids_path):
+        raise HTTPException(status_code=500, detail=f"CSV file with playlist id's was not existent")
     with open(Path(settings.csv_playlist_ids_path)) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=';')
         next(csv_reader, None)  # skip the headers
@@ -150,6 +153,8 @@ def classify_spotify_playlist_with_genres(playlist_id: str, update_in_db=True, e
 def update_latest_track_playlists():
     access_token = get_valid_access_token()['access_token']
 
+    if not os.path.exists(settings.csv_latest_tracks_playlists_path):
+        raise HTTPException(status_code=500, detail=f"CSV file with latest_track-playlist id's was not existent")
     with open(Path(settings.csv_latest_tracks_playlists_path)) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=';')
         next(csv_reader, None)  # skip the headers
@@ -225,7 +230,7 @@ def create_diff_between_latest_playlist_states():
         new_tracks_for_playlist = []
         if playlist_id not in earlier_state_of_playlists:
             print(f"\t\tNew playlist '{latest_playlist['name']}' was found. Requesting artist data from spotify")
-            url = f"http://localhost:8080/spotify/playlist_genre_classification?playlist_id={playlist_id}"
+            url = f"{settings.host}:{settings.port}/spotify/playlist_genre_classification?playlist_id={playlist_id}"
             requests.exec_get_request_with_headers_and_token_and_return_data(url, access_token)
             new_tracks_for_playlist.extend(latest_playlist['track_ids'])
         else:

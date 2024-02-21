@@ -1,40 +1,56 @@
+import datetime
 import json
 import re
 
 from bson.json_util import dumps
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from fastapi.security import OAuth2PasswordBearer
+from starlette.responses import RedirectResponse
 from starlette.status import HTTP_200_OK
 
 from spot_lib_mng import database
 from spot_lib_mng.config import settings
-from spot_lib_mng.spotify_api.token import get_new_access_token_from_spotify, evaluate_spotify_return_code
-from spot_lib_mng.spotify_api.user_data import retrieve_spotify_user_data, start_spotify_search, import_item_from_spotify
-from spot_lib_mng.spotify_api.tracks import retrieve_track_features, discover_new_tracks
-from spot_lib_mng.spotify_api.playlists import get_current_state_of_spotify_playlists, add_to_default_playlist, \
-    classify_spotify_playlist_with_genres, update_latest_track_playlists, create_diff_between_latest_playlist_states
 from spot_lib_mng.spotify_api.artists import find_artists_with_highest_popularity_and_most_followers, \
     get_top_tracks_for_artist, get_related_artists, get_followed_artists
+from spot_lib_mng.spotify_api.playlists import get_current_state_of_spotify_playlists, add_to_default_playlist, \
+    classify_spotify_playlist_with_genres, update_latest_track_playlists, create_diff_between_latest_playlist_states
+from spot_lib_mng.spotify_api.token import get_new_access_token_from_spotify, evaluate_spotify_return_code
+from spot_lib_mng.spotify_api.tracks import retrieve_track_features, discover_new_tracks
+from spot_lib_mng.spotify_api.user_data import retrieve_spotify_user_data_and_store_in_db, start_spotify_search, \
+    import_item_from_spotify, is_owner, gather_spotify_user_data
+from spot_lib_mng.utils.utils import convert_query_param_string
 
 router = APIRouter()
 db = database.get_db()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @router.get("/request_access_token", status_code=HTTP_200_OK, tags=["login"])
 def request_access_token():
-    get_new_access_token_from_spotify()
+    url = get_new_access_token_from_spotify()
+    return RedirectResponse(url=url)
 
 
 @router.get("/retrieve_code", status_code=HTTP_200_OK, tags=["login"],
             description="Is used by Spotify and should not be called by a user")
 def retrieve_code(code: str):
-    token = evaluate_spotify_return_code(code)
-    database.store_access_token(token)
-    return {'status': 'SUCCESS', 'info': "Token was stored in DB. You can now retrieve your personal spotify data"}
+    fe_url = "http://localhost:5173"
+    jwt = evaluate_spotify_return_code(code)
+    token = jwt['access_token']
+    user_id = ""
+    if is_owner(token):
+        database.store_access_token(jwt)
+        user_id = settings.spotify_username
+    expiry_date = jwt['expiry_date'].strftime('%Y-%m-%dT%H:%M:%S') + '+00:00'
+    return RedirectResponse(
+        url=f"{fe_url}?token={token}&user_id={user_id}&expiry_date={convert_query_param_string(expiry_date)}")
 
 
 @router.get("/trigger_complete_data_retrieval", status_code=HTTP_200_OK, tags=["spotify"])
-def trigger_complete_data_retrieval():
-    retrieve_spotify_user_data()
+def trigger_complete_data_retrieval(token: str = Depends(oauth2_scheme)):
+    if not is_owner(token):
+        return {"info": "user is not owner, though can not trigger the process"}
+    retrieve_spotify_user_data_and_store_in_db(token)
     playlists_count, tracks_count = get_current_state_of_spotify_playlists()
     create_diff_between_latest_playlist_states()
     update_latest_track_playlists()
@@ -43,18 +59,26 @@ def trigger_complete_data_retrieval():
 
 
 @router.get("/latest_user_data_states", status_code=HTTP_200_OK, tags=["spotify"])
-def latest_user_data_states(amount: int = 1):
-    return json.loads(dumps(database.find_latest_documents(settings.most_listened_collection_name, amount)))
+def latest_user_data_states(amount: int = 1, token: str = Depends(oauth2_scheme)):
+    if is_owner(token):
+        return json.loads(dumps(database.find_latest_documents(settings.most_listened_collection_name, amount)))
+    else:
+        user_data = gather_spotify_user_data(token, store=False)
+        return [{'created_at': {'$date': datetime.datetime.utcnow()}, 'data': user_data}]
 
 
 @router.get("/latest_playlist_states", status_code=HTTP_200_OK, tags=["playlist"])
-def latest_playlist_states(amount: int = 1):
-    return json.loads(dumps(database.find_latest_documents(settings.playlist_collection_name, amount)))
+def latest_playlist_states(amount: int = 1, token: str = Depends(oauth2_scheme)):
+    if is_owner(token):
+        return json.loads(dumps(database.find_latest_documents(settings.playlist_collection_name, amount)))
+    return []
 
 
 @router.get("/latest_diff_states", status_code=HTTP_200_OK, tags=["playlist"])
-def latest_diff_states(amount: int = 1):
-    return json.loads(dumps(database.find_latest_documents(settings.diff_collection_name, amount)))
+def latest_diff_states(amount: int = 1, token: str = Depends(oauth2_scheme)):
+    if is_owner(token):
+        return json.loads(dumps(database.find_latest_documents(settings.diff_collection_name, amount)))
+    return []
 
 
 @router.get("/playlists_by_ids", status_code=HTTP_200_OK, tags=["playlist"])
@@ -117,8 +141,8 @@ def related_artists(artist_id: str):
 
 
 @router.get("/followed_artists", status_code=HTTP_200_OK, tags=["artist"])
-def followed_artists():
-    return get_followed_artists()
+def followed_artists(token: str = Depends(oauth2_scheme)):
+    return get_followed_artists(token)
 
 
 @router.get("/artists_for_genre", status_code=HTTP_200_OK, tags=["artist"])
@@ -200,7 +224,8 @@ def import_item(id: str, type: str):
         return {}
     if type != "artist" and type != "track" and type != "playlist":
         return {}
-    return import_item_from_spotify(id, type)
+    detail = import_item_from_spotify(id, type)
+    return {"status": 'SUCCESS', 'detail': detail}
 
 
 @router.get("/highest_artist_stats", status_code=HTTP_200_OK, tags=["artist"])

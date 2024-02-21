@@ -1,12 +1,12 @@
-from datetime import datetime, timedelta
 import json
 import urllib.parse
+from datetime import datetime, timedelta
 
 from bson.json_util import dumps
 from pymongo import MongoClient
-from spot_lib_mng.config import settings
 from pymongo.server_api import ServerApi
 
+from spot_lib_mng.config import settings
 from spot_lib_mng.utils.requests import exec_get_request_with_headers_and_token_and_return_data
 from spot_lib_mng.utils.utils import remove_metadata
 
@@ -118,7 +118,7 @@ def find_artists_for_genre(genre: str):
         if artist['genres'] and genre in artist['genres']:
             matched_artists.append(artist)
 
-    return matched_artists
+    return sorted(matched_artists, key=lambda x: x['popularity']),
 
 
 def find_all_artists_and_genres():

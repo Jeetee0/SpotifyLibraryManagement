@@ -1,6 +1,5 @@
 import datetime
 import sys
-import webbrowser
 from base64 import b64encode
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
@@ -40,7 +39,7 @@ def get_new_access_token_from_spotify():
         "redirect_uri": REDIRECT_URI,
         "scope": SCOPE
     }
-    webbrowser.open("https://accounts.spotify.com/authorize?" + urlencode(auth_headers))
+    return "https://accounts.spotify.com/authorize?" + urlencode(auth_headers)
 
 
 def evaluate_spotify_return_code(code: str):

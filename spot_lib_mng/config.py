@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     modifier: str
+    host: str
+    port: str
 
     spotify_username: str
     spotify_scope: str

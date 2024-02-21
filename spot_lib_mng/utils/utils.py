@@ -14,4 +14,4 @@ def remove_metadata(db_item, with_mongo_id=False):
 
 
 def convert_query_param_string(incoming: str):
-    return incoming.replace(' ', '+').replace(',', '%2C')
+    return incoming.replace(' ', '+').replace(',', '%2C').replace('+', '%2B')
