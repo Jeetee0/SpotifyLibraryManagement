@@ -229,8 +229,11 @@ def create_diff_between_latest_playlist_states():
     for playlist_id, latest_playlist in latest_state_of_playlists.items():
         new_tracks_for_playlist = []
         if playlist_id not in earlier_state_of_playlists:
+            backend_host = settings.slm_backend_host
+            if settings.slm_backend_port:
+                backend_host += ":" + settings.slm_backend_port
             print(f"\t\tNew playlist '{latest_playlist['name']}' was found. Requesting artist data from spotify")
-            url = f"{settings.host}:{settings.port}/spotify/playlist_genre_classification?playlist_id={playlist_id}"
+            url = f"{backend_host}/spotify/playlist_genre_classification?playlist_id={playlist_id}"
             requests.exec_get_request_with_headers_and_token_and_return_data(url, access_token)
             new_tracks_for_playlist.extend(latest_playlist['track_ids'])
         else:

@@ -1,5 +1,4 @@
 import datetime
-import sys
 from base64 import b64encode
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
@@ -56,8 +55,9 @@ def evaluate_spotify_return_code(code: str):
     }
     response = requests.post(f"{HOST}/api/token", headers=headers, data=body)
     if response.status_code != 200:
-        print(f"ERROR: response was not 200 - {response.status_code} - {response.text}")
-        sys.exit(1)
+        raise HTTPException(status_code=500,
+                            detail=f"ERROR - {response.status_code} - "
+                                   f"{response.text}")
     body = response.json()
     body['expiry_date'] = datetime.utcnow() + timedelta(0, body['expires_in'] - 5)
 
@@ -68,9 +68,9 @@ def evaluate_spotify_return_code(code: str):
 def get_valid_access_token():
     token = database.get_access_token()
     if not token:
-        get_new_access_token_from_spotify()
         raise HTTPException(status_code=500,
-                            detail="Token was not in DB. Will trigger auth process. Please try again in a moment.")
+                            detail="Token was not in DB. "
+                                   "Please trigger auth process under /spotify/request_access_token")
 
     if token and 'expiry_date' in token and datetime.utcnow() < token['expiry_date']:
         return token

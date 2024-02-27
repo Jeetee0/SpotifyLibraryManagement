@@ -3,8 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     modifier: str
-    host: str
-    port: str
+    slm_backend_host: str
+    slm_backend_port: str
+    slm_frontend_host: str
+    slm_frontend_port: str
 
     spotify_username: str
     spotify_scope: str

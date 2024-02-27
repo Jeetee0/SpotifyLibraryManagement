@@ -16,8 +16,8 @@ def exec_get_request_with_headers_and_token_and_return_data(url: str, access_tok
     elif response.status_code not in [200, 204]:
         print(
             f"ERROR - request to GET @ '{url}' was not successful. Response from external source: '{response.status_code}' - {response.text}")
-        return {}
-        # raise HTTPException(status_code=500, detail=f"Request to {url} was not successful. Error: {response.status_code} - {response.text}")
+        raise HTTPException(status_code=500,
+                            detail=f"Request to {url} was not successful. Error: {response.status_code} - {response.text}")
 
     return response.json()
 

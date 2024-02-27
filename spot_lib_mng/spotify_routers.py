@@ -26,7 +26,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @router.get("/request_access_token", status_code=HTTP_200_OK, tags=["login"])
-def request_access_token():
+def request_access_token(source: str):
     url = get_new_access_token_from_spotify()
     return RedirectResponse(url=url)
 
@@ -34,7 +34,9 @@ def request_access_token():
 @router.get("/retrieve_code", status_code=HTTP_200_OK, tags=["login"],
             description="Is used by Spotify and should not be called by a user")
 def retrieve_code(code: str):
-    fe_url = "http://localhost:5173"
+    fe_url = settings.slm_frontend_host
+    if settings.slm_frontend_port:
+        fe_url += ":" + settings.slm_frontend_port
     jwt = evaluate_spotify_return_code(code)
     token = jwt['access_token']
     user_id = ""
@@ -63,7 +65,7 @@ def latest_user_data_states(amount: int = 1, token: str = Depends(oauth2_scheme)
     if is_owner(token):
         return json.loads(dumps(database.find_latest_documents(settings.most_listened_collection_name, amount)))
     else:
-        user_data = gather_spotify_user_data(token, store=False)
+        user_data = gather_spotify_user_data(token, store=True)
         return [{'created_at': {'$date': datetime.datetime.utcnow()}, 'data': user_data}]
 
 

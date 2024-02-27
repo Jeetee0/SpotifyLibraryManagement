@@ -163,7 +163,7 @@ def extract_track_and_store_in_db(track: dict, access_token: str, store=False):
                 store_spotify_artist_data_in_db(artist_json)
     if store:
         if track_id not in imported_track_ids:
-            print(f"INFO: Inserting track '{track_id}'")
+            # print(f"INFO: Inserting track '{track_id}'")
             update_one(settings.tracks_collection_name, {'_id': track_id}, new_track)
             imported_track_ids.append(track_id)
     return remove_metadata(new_track)
@@ -183,7 +183,7 @@ def store_spotify_artist_data_in_db(artist_json: dict, store=True):
         db_artist['image_url'] = artist_json['images'][0]['url']
     if store:
         if artist_id not in imported_artist_ids:
-            print(f"INFO: Inserting artist '{artist_id}'")
+            # print(f"INFO: Inserting artist '{artist_id}'")
             update_one(settings.artists_collection_name, {'id': artist_id}, db_artist)
             imported_artist_ids.append(artist_id)
     return db_artist
