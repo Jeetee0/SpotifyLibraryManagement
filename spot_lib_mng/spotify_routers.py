@@ -12,12 +12,13 @@ from spot_lib_mng import database
 from spot_lib_mng.config import settings
 from spot_lib_mng.spotify_api.artists import find_artists_with_highest_popularity_and_most_followers, \
     get_top_tracks_for_artist, get_related_artists, get_followed_artists
-from spot_lib_mng.spotify_api.playlists import get_current_state_of_spotify_playlists, add_to_default_playlist, \
-    classify_spotify_playlist_with_genres, update_latest_track_playlists, create_diff_between_latest_playlist_states
+from spot_lib_mng.spotify_api.playlists import add_to_default_playlist, \
+    classify_spotify_playlist_with_genres, update_latest_track_playlists, get_current_state_of_spotify_playlists, \
+    create_diff_between_latest_playlist_states
 from spot_lib_mng.spotify_api.token import get_new_access_token_from_spotify, evaluate_spotify_return_code
 from spot_lib_mng.spotify_api.tracks import retrieve_track_features, discover_new_tracks
-from spot_lib_mng.spotify_api.user_data import retrieve_spotify_user_data_and_store_in_db, start_spotify_search, \
-    import_item_from_spotify, is_owner, gather_spotify_user_data
+from spot_lib_mng.spotify_api.user_data import start_spotify_search, \
+    import_item_from_spotify, is_owner, gather_spotify_user_data, retrieve_spotify_user_data_and_store_in_db
 from spot_lib_mng.utils.utils import convert_query_param_string
 
 router = APIRouter()

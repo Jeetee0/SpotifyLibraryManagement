@@ -1,6 +1,6 @@
 import csv
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -169,23 +169,20 @@ def update_latest_track_playlists():
 
             print(f"INFO: Updating 'Latest-{genre_classification}' playlist with id: '{latest_playlist_id}'")
             newest_track_ids = []
-            one_month_ago = datetime.utcnow() - timedelta(days=61)
 
-            for playlist_id in spotify_playlist_ids.split(','):
-                playlist = get_spotify_playlist_data_raw(playlist_id, access_token)
-                tracks = get_all_tracks_for_spotify_playlist(playlist, access_token)
-                for track in tracks:
-                    track_id = track['track']['id']
-                    added_to_playlist_timestamp = datetime.strptime(track['added_at'], '%Y-%m-%dT%H:%M:%SZ')
-                    if added_to_playlist_timestamp > one_month_ago and track_id not in newest_track_ids:
-                        # print(f"\t\tTrack added: {track['track']['name']}")
-                        newest_track_ids.append(track_id)
-
-            # remove old tracks
+            print(f"\tCleanup playlist / removing tracks")
             playlist = get_spotify_playlist_data_raw(latest_playlist_id, access_token)
             tracks = get_all_tracks_for_spotify_playlist(playlist, access_token)
             track_ids = [track['track']['id'] for track in tracks]
             remove_tracks_from_spotify_playlist(latest_playlist_id, track_ids, access_token)
+
+            for playlist_id in spotify_playlist_ids.split(','):
+                playlist = get_spotify_playlist_data_raw(playlist_id, access_token)
+                tracks = get_all_tracks_for_spotify_playlist(playlist, access_token)
+                for track in tracks[-10:]:  # just use 10 last tracks
+                    track_id = track['track']['id']
+                    if track_id not in newest_track_ids:
+                        newest_track_ids.append(track_id)
 
             print(f"\tAdding '{len(newest_track_ids)}' tracks")
             add_tracks_to_playlist(latest_playlist_id, newest_track_ids)
